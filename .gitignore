@@ -1,0 +1,79 @@
+# Secrets and local environment
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+github_*_deploy*
+
+# Python/runtime caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# OS/editor noise
+.DS_Store
+*.swp
+*.swo
+
+# Private research artifacts released after paper acceptance
+/data/
+/autotemp/
+reports/
+agents/knowledge_base*/
+experiments/outputs/
+experiments/visualization/outputs/
+**/*smoke*/
+**/*smoke*
+
+# Generated datasets, indexes, predictions, and metric exports
+*.csv
+*.tsv
+*.parquet
+*.jsonl
+*.pkl
+*.pickle
+*.faiss
+*.npy
+*.npz
+
+# Model/checkpoint artifacts
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.h5
+*.hdf5
+*.pb
+*.tflite
+*.bin
+
+# Re-creatable training/runtime caches
+**/moment_cache/
+**/hf_cache/
+**/modelscope_cache/
+
+# Local logs
+*.log
+run_kb_*.log
+
+# Packaging and coverage outputs
+*.egg-info/
+.coverage
+htmlcov/
+
+# Baseline interface workspace: keep code/config only, exclude external checkouts and run outputs
+baseline/.git/
+baseline/external/
+baseline/**/__pycache__/
+baseline/**/outputs/
+baseline/**/*.pt
+baseline/**/*.pth
+baseline/**/*.ckpt

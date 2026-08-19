@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "purpose": "Official-repository provenance and adapter targets for the paper baseline comparison slots. This registry does not indicate that experiments have been run.",
+  "external_root": "external",
+  "sources": [
+    {
+      "source_id": "ltsf_linear",
+      "models": ["dlinear", "nlinear"],
+      "official_repo": "https://github.com/cure-lab/LTSF-Linear",
+      "repo_name": "LTSF-Linear",
+      "local_path": "external/LTSF-Linear",
+      "commit": null,
+      "license": "see upstream repository",
+      "adapter_status": "interface_ready_not_cloned",
+      "paper_role": "Official implementation target for DLinear and NLinear; local PyTorch fallback remains available for smoke checks."
+    },
+    {
+      "source_id": "patchtst",
+      "models": ["patchtst"],
+      "official_repo": "https://github.com/yuqinie98/PatchTST",
+      "repo_name": "PatchTST",
+      "local_path": "external/PatchTST",
+      "commit": null,
+      "license": "see upstream repository",
+      "adapter_status": "interface_ready_not_cloned",
+      "paper_role": "Official implementation target for PatchTST; local compact fallback remains available for smoke checks."
+    },
+    {
+      "source_id": "itransformer",
+      "models": ["itransformer"],
+      "official_repo": "https://github.com/thuml/iTransformer",
+      "repo_name": "iTransformer",
+      "local_path": "external/iTransformer",
+      "commit": null,
+      "license": "see upstream repository",
+      "adapter_status": "interface_ready_not_cloned",
+      "paper_role": "Official implementation target for iTransformer; local compact fallback remains available for smoke checks."
+    }
+  ]
+}

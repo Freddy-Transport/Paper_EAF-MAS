@@ -1,0 +1,15 @@
+huggingface-hub==0.24.0
+numpy==1.25.2
+torch==2.0.1
+transformers==4.33.3
+
+# Multi-agent system dependencies
+pydantic>=2.0
+pandas
+openpyxl
+requests
+langchain
+langchain-openai
+langchain-community
+faiss-cpu
+sentence-transformers

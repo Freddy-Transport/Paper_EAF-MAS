@@ -1,0 +1,19 @@
+input_roots:
+  - autotemp/qwenplus_live_case_set_20260614_203232
+  - autotemp/figure9b_true_controller_abstention_20260816_01
+formal_metric_rows:
+  - autotemp/focus_aligned_qwenplus_live_20260614_135648/full_metrics/predictions/full_metric_rows.csv
+output_root: experiments/visualization/outputs
+method_aliases:
+  numerical_only: PT-MOMENT
+  rag_explain: EAF-MAS-X
+  event_adapter_frozen_moment: EAF-MAS-C
+disabled_modes:
+  - event_adapter_peft_moment
+  - full_skill_agent
+neutral_wape_gain_threshold: 0.01
+correction_bound_default: 0.05
+top_k_channels: 20
+skip_fig1: true
+channel_map: data/nyc_top128_channel_map.json
+events_json: data/nyc_top128_station_events.json

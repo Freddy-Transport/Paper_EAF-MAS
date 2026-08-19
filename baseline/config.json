@@ -1,0 +1,29 @@
+{
+  "data_path": "/root/autodl-tmp/0206moment/data/nyc_top128_station_hourly_flow.csv",
+  "channel_map_path": "/root/autodl-tmp/0206moment/data/nyc_top128_channel_map.json",
+  "lookback": 512,
+  "horizon": 192,
+  "train_rows": 8640,
+  "val_rows": 2880,
+  "stride": 1,
+  "seed": 42,
+  "batch_size": 32,
+  "max_epochs": 30,
+  "patience": 5,
+  "learning_rate": 0.0005,
+  "weight_decay": 0.0001,
+  "hidden_dim": 128,
+  "patch_len": 16,
+  "patch_stride": 8,
+  "num_layers": 2,
+  "num_heads": 4,
+  "dropout": 0.1,
+  "models": [
+    "seasonal_week",
+    "last_day",
+    "dlinear",
+    "nlinear",
+    "patchtst",
+    "itransformer"
+  ]
+}
