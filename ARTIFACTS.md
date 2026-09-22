@@ -6,15 +6,15 @@ This repository contains the EAF-MAS source code, experiment entry points, basel
 
 ### Dataset package
 
-- processed NYC Top128 hourly subway ridership;
-- Top128 channel metadata and mappings;
+- processed NYC hourly subway ridership for 128 station channels;
+- metadata and mappings for the 128-channel ridership tensor;
 - structured public-event records;
-- venue-to-station and event-focused channel mappings;
+- venue-to-station mappings and the 28-channel venue-associated subset;
 - train, validation, and test split manifests.
 
 ### Model package
 
-- PT-MOMENT Top128 checkpoint and configuration;
+- PT-MOMENT checkpoint and configuration for the 128 station channels;
 - frozen residual-adapter checkpoint and training manifest;
 - train/validation PT-MOMENT prediction exports used to construct residual targets;
 - model and artifact checksums.
