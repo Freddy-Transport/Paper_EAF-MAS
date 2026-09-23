@@ -33,6 +33,8 @@ release_staging/
 *.png
 *.jpg
 *.jpeg
+# Published framework illustration used by README
+!/assets/eafmas_architecture_figure1.png
 *.zip
 *.tar.gz
 /data/

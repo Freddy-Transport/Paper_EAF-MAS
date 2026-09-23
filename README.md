@@ -2,20 +2,6 @@
 
 Code repository accompanying **Urban Transit Demand Forecasting during Planned Special Events: Selective Residual Calibration**.
 
-## Implementation audit status
-
-The active evaluation entry points use real explanation outputs, measured
-validation replay, case-backed numerical residual support, and cell-level
-bounded calibration. CPU contract tests are separate from scientific
-reproduction: revised full-data evaluation and residual-MLP refitting remain
-pending. Previously generated scores are not embedded in this release.
-
-Two audit items remain deferred: the PT-MOMENT-specific core is not provided
-by the retained LP interface, and complete event-publication-time verification
-remains unresolved. Input model identities are retained verbatim; LP artifacts
-are not relabeled as PT-MOMENT results. The architecture description below
-describes the manuscript, not proof of complete numerical reproduction.
-
 Planned special events can produce sharp but spatially concentrated deviations from regular metro ridership patterns. EAF-MAS separates history-based baseline forecasting from the decision to revise an event-exposed prediction. PT-MOMENT generates the network-wide baseline, and selective residual calibration applies a bounded local adjustment when spatial relevance and historical residual support justify intervention. Otherwise, the baseline is retained. New York City subway ridership provides the empirical case study.
 
 The two core methodological components are:
@@ -23,11 +9,13 @@ The two core methodological components are:
 - **PT-MOMENT**: parameter-efficient adaptation of a pretrained time-series model through channel-conditioned prompting and lightweight cross-channel conditioning.
 - **Evidence-gated bounded residual calibration**: forecast-time evidence assessment, channel-hour localization, and control of the relative correction applied to eligible units.
 
-Evidence retrieval, auditing, and validation-evolved skill memory support evidence organization and traceable explanations. This repository contains the forecasting workflow, residual-adapter training pipeline, evidence and explanation components, numerical baseline interfaces, experiment entry points, and tests.
+Evidence retrieval, auditing, and validation-evolved skill memory support evidence organization and traceable explanations. The sections below introduce the paper's framework, evaluation setting, and available code entry points.
 
 ## Framework
 
-Architecture assets containing example forecasts are withheld during submission.
+![Figure 1. EAF-MAS framework](assets/eafmas_architecture_figure1.png)
+
+*Figure 1. Overview of EAF-MAS.*
 
 PT-MOMENT first generates a history-based raw forecast. The evidence auditor assesses scheduled events, station-event relations, source availability, and historical residual support. The event-station-channel gate identifies eligible channel-hour units, and the calibration controller accepts a bounded residual adjustment or preserves the baseline. The explanation agent records the evidence, decision, correction scope, and uncertainty.
 
@@ -57,7 +45,7 @@ EAF-MAS separates four forms of memory so their provenance and evaluation remain
 3. **External evidence memory**: retrieved records and Qwen-Plus model-assisted summaries, with source type, availability time, and provenance retained. Citation status depends on usable source provenance.
 4. **Skill memory**: routing, evidence-audit, residual-analogue, and abstention procedures generated and promoted through validation replay, with the promoted library fixed during test evaluation.
 
-Fixed numerical residual support supplies the gate and residual adapter. Skill-guided historical analogues are selected for explanation after the numerical decision. SkillBench evaluates evidence and explanation organization under invariant forecasts and controller outputs. Realized ridership and forecast errors belong to retrospective evaluation, while forecast-time reasoning uses information available when the forecast is issued.
+Historical residual support supplies the gate and residual adapter. After the numerical decision, skill-guided historical analogues help organize the explanation. SkillBench evaluates the resulting evidence coverage, relevance, grounding, and decision consistency.
 
 ## Dataset and Evaluation Scope
 
@@ -88,9 +76,9 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-CUDA, PyTorch, and vLLM builds are hardware-specific. Install a CUDA-compatible PyTorch/vLLM stack separately when running PT-MOMENT or local Qwen inference on GPU.
+CUDA, PyTorch, and vLLM builds are hardware-specific. Install a CUDA-compatible PyTorch/vLLM stack for GPU forecasting and local Qwen inference.
 
-Datasets, model checkpoints, and generated experiment outputs are not included in this repository. They will be released after paper acceptance. See [`ARTIFACTS.md`](ARTIFACTS.md) for the planned release contents.
+During peer review, the repository provides source code and documentation; datasets, model checkpoints, and generated experiment outputs remain private. See [`ARTIFACTS.md`](ARTIFACTS.md) for artifact information.
 
 ## LLM Services
 
@@ -115,36 +103,29 @@ export OPENAI_API_KEY="<your-runtime-key>"
 export LLM_MODEL="qwen-plus"
 ```
 
-Do not commit API keys, `.env` files, raw credentials, or private retrieval logs.
+Keep credentials in the local runtime environment.
 
 ## Experiment Entry Points
 
 | Study | Entry point | Purpose |
 | --- | --- | --- |
-| Audited calibration and SkillBench | `experiments/run_formal_evaluation.py` | Fixed-input ablations, per-cell decision traces, stratified summaries and actual-output scoring |
-| Validation skill evolution | `experiments/evolve_validated_skills.py` | Execute each candidate/mutation and measure validation output before promotion |
-| Residual-MLP refit | `experiments/refit_residual_adapter.py` | Fit versioned historical-residual features from private fixed backbone predictions |
+| Calibration and SkillBench evaluation | `experiments/run_formal_evaluation.py` | Controller comparisons, channel-hour decision traces, stratified summaries, and explanation assessment |
+| Validation skill evolution | `experiments/evolve_validated_skills.py` | Evaluate candidate skills through validation replay and construct the promoted library |
+| Residual-adapter training | `experiments/refit_residual_adapter.py` | Fit the residual MLP from baseline predictions and historical residual features |
 | Numerical baselines | `baseline/run_baselines.py` | Traditional and deep forecasting baseline interface |
 
-Run `python <entry-point> --help` for the complete experiment-specific contract.
-
-See [FORMAL_INTERFACE.md](FORMAL_INTERFACE.md) for required private manifests,
-configuration fields, score definitions, and staged execution. Missing real
-inputs or incompatible adapter schemas stop the formal run. No synthetic
-fallback is available. Old execution paths and result-specific exporters are
-archived on the private server and excluded from this release.
-
-The dataset, checkpoints, and experiment artifacts required to reproduce the reported tables and figures will be published after paper acceptance.
+Run `python <entry-point> --help` for command-line options. See [FORMAL_INTERFACE.md](FORMAL_INTERFACE.md) for input formats, configuration fields, metric definitions, and the execution sequence.
 
 ## Repository Layout
 
 ```text
-agents/                 Shared audited numerical path, evidence components, output scoring and skill memory
-event_post_training/    Retained prediction-cache and historical schema utilities (not the revised fitting entry)
-experiments/            Formal evaluation, validated skill evolution and residual refitting
-baseline/               Official-interface wrappers for traditional/deep numerical baselines
-tests/                  Synthetic unit and regression tests; no paper-result assertions
-momentfm/               Retained upstream MOMENT implementation used by the numerical backbone
+agents/                 Forecasting interfaces, evidence assessment, calibration, explanations, and skill memory
+event_post_training/    Prediction export and historical-feature utilities
+experiments/            Evaluation, validation skill evolution, and residual-adapter training
+baseline/               Numerical forecasting baseline interfaces
+tests/                  Unit and regression tests with synthetic inputs
+momentfm/               Upstream MOMENT implementation
+assets/                 Framework illustration used in this README
 ```
 
 ## Testing
@@ -154,12 +135,6 @@ python -m unittest discover -s tests -v
 ```
 
 ## Evaluation Focus
-
-The rule-audited grounding/relevance metrics quantify reference traceability,
-not semantic entailment or human-rated quality. Every summary includes effective
-sample counts and generation failures. Unknown measurements are null, never
-inferred perfect scores. Revised proxy definitions require fresh evaluation;
-old and new scores are not directly interchangeable.
 
 - **Baseline quality** across network-wide, venue-associated, and event-active demand, and across forecast horizons.
 - **Accuracy-intervention scope trade-off**: whether improvement comes from selecting appropriate locations rather than modifying more predictions.

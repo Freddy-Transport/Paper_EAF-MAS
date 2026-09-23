@@ -29,11 +29,13 @@ This repository contains the EAF-MAS source code, experiment entry points, basel
 
 ## Repository Policy
 
+The README framework illustration (`assets/eafmas_architecture_figure1.png`) is included as project documentation.
+
 The Git repository must not contain:
 
 - `data/` datasets or derived split files;
 - `autotemp/` experiment outputs;
-- generated knowledge-base indexes, retrieval corpora, predictions, metric exports, reports, or paper figures;
+- generated knowledge-base indexes, retrieval corpora, predictions, metric exports, reports, or result figures beyond the README framework illustration;
 - smoke-run directories, smoke checkpoints, or smoke training manifests;
 - model weights such as `.pt`, `.pth`, `.ckpt`, `.safetensors`, `.onnx`, or framework-specific weight binaries;
 - API keys, SSH keys, `.env` files, or private retrieval logs.
