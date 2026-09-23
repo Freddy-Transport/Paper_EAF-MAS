@@ -23,6 +23,18 @@ __pycache__/
 *.swo
 
 # Private research artifacts released after paper acceptance
+legacy/
+outputs/
+results/
+private_runs/
+private_inputs/
+release_staging/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.zip
+*.tar.gz
 /data/
 /autotemp/
 reports/

@@ -2,6 +2,20 @@
 
 Code repository accompanying **Urban Transit Demand Forecasting during Planned Special Events: Selective Residual Calibration**.
 
+## Implementation audit status
+
+The active evaluation entry points use real explanation outputs, measured
+validation replay, case-backed numerical residual support, and cell-level
+bounded calibration. CPU contract tests are separate from scientific
+reproduction: revised full-data evaluation and residual-MLP refitting remain
+pending. Previously generated scores are not embedded in this release.
+
+Two audit items remain deferred: the PT-MOMENT-specific core is not provided
+by the retained LP interface, and complete event-publication-time verification
+remains unresolved. Input model identities are retained verbatim; LP artifacts
+are not relabeled as PT-MOMENT results. The architecture description below
+describes the manuscript, not proof of complete numerical reproduction.
+
 Planned special events can produce sharp but spatially concentrated deviations from regular metro ridership patterns. EAF-MAS separates history-based baseline forecasting from the decision to revise an event-exposed prediction. PT-MOMENT generates the network-wide baseline, and selective residual calibration applies a bounded local adjustment when spatial relevance and historical residual support justify intervention. Otherwise, the baseline is retained. New York City subway ridership provides the empirical case study.
 
 The two core methodological components are:
@@ -13,7 +27,7 @@ Evidence retrieval, auditing, and validation-evolved skill memory support eviden
 
 ## Framework
 
-![EAF-MAS architecture](assets/eafmas_architecture_figure1.png)
+Architecture assets containing example forecasts are withheld during submission.
 
 PT-MOMENT first generates a history-based raw forecast. The evidence auditor assesses scheduled events, station-event relations, source availability, and historical residual support. The event-station-channel gate identifies eligible channel-hour units, and the calibration controller accepts a bounded residual adjustment or preserves the baseline. The explanation agent records the evidence, decision, correction scope, and uncertainty.
 
@@ -107,28 +121,29 @@ Do not commit API keys, `.env` files, raw credentials, or private retrieval logs
 
 | Study | Entry point | Purpose |
 | --- | --- | --- |
-| Full forecasting evaluation | `experiments/run_full_paper_results.py` | Network-wide, venue-associated, and event-active forecast metrics |
-| Event-aware case workflow | `experiments/run_paper_event_forecasting.py` | Evidence audit, controller decision, focused outputs, and explanations |
-| Evidence Audit v3 | `experiments/run_evidence_audit_v3_fullstudy.py` | Source, geo-temporal, semantic, residual, and explanation diagnostics |
-| AutoSkill SkillBench | `experiments/run_full_autoskill_skillbench.py` | Full-split explanation-memory lifecycle and effectiveness |
-| Matched calibration ablation | `experiments/run_calibration_matched_ablation.py` | Calibration gain, deterioration, relative correction, and intervention scope under fixed numerical inputs |
-| Event-stratified analysis | `experiments/analyze_event_stratified_results.py` | Calibration across event types, venue groups, and station contexts |
-| Gate coverage diagnostics | `experiments/run_gate_coverage_diagnostics.py` | Eligibility filtering and sparse channel-hour intervention |
-| Runtime/cost profiling | `experiments/profile_eafmas_runtime_cost.py` | Numerical, retrieval, and LLM runtime accounting |
+| Audited calibration and SkillBench | `experiments/run_formal_evaluation.py` | Fixed-input ablations, per-cell decision traces, stratified summaries and actual-output scoring |
+| Validation skill evolution | `experiments/evolve_validated_skills.py` | Execute each candidate/mutation and measure validation output before promotion |
+| Residual-MLP refit | `experiments/refit_residual_adapter.py` | Fit versioned historical-residual features from private fixed backbone predictions |
 | Numerical baselines | `baseline/run_baselines.py` | Traditional and deep forecasting baseline interface |
 
 Run `python <entry-point> --help` for the complete experiment-specific contract.
+
+See [FORMAL_INTERFACE.md](FORMAL_INTERFACE.md) for required private manifests,
+configuration fields, score definitions, and staged execution. Missing real
+inputs or incompatible adapter schemas stop the formal run. No synthetic
+fallback is available. Old execution paths and result-specific exporters are
+archived on the private server and excluded from this release.
 
 The dataset, checkpoints, and experiment artifacts required to reproduce the reported tables and figures will be published after paper acceptance.
 
 ## Repository Layout
 
 ```text
-agents/                 Multi-agent workflow, Evidence-RAG, auditor, controller, explanation, and skill memory
-event_post_training/    Strict prediction export, sample construction, and frozen residual-adapter training
-experiments/            Formal runs, ablations, diagnostics, visualization, and paper-asset exporters
+agents/                 Shared audited numerical path, evidence components, output scoring and skill memory
+event_post_training/    Retained prediction-cache and historical schema utilities (not the revised fitting entry)
+experiments/            Formal evaluation, validated skill evolution and residual refitting
 baseline/               Official-interface wrappers for traditional/deep numerical baselines
-tests/                  Unit and regression tests for forecasting, evidence, skills, figures, and artifacts
+tests/                  Synthetic unit and regression tests; no paper-result assertions
 momentfm/               Retained upstream MOMENT implementation used by the numerical backbone
 ```
 
@@ -136,10 +151,15 @@ momentfm/               Retained upstream MOMENT implementation used by the nume
 
 ```bash
 python -m unittest discover -s tests -v
-python -m unittest discover -s experiments/visualization/tests -v
 ```
 
 ## Evaluation Focus
+
+The rule-audited grounding/relevance metrics quantify reference traceability,
+not semantic entailment or human-rated quality. Every summary includes effective
+sample counts and generation failures. Unknown measurements are null, never
+inferred perfect scores. Revised proxy definitions require fresh evaluation;
+old and new scores are not directly interchangeable.
 
 - **Baseline quality** across network-wide, venue-associated, and event-active demand, and across forecast horizons.
 - **Accuracy-intervention scope trade-off**: whether improvement comes from selecting appropriate locations rather than modifying more predictions.

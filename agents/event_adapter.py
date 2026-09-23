@@ -268,6 +268,8 @@ class EventResidualAdapter(nn.Module):
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         out = self.net(features).squeeze(-1)
+        if getattr(self, "output_transform", "legacy_tanh") == "identity":
+            return out
         correction = torch.clamp(torch.tanh(out) * self.max_correction, -self.max_correction, self.max_correction)
         if features.shape[-1] >= 1:
             event_gate = torch.clamp(features[..., 0], 0.0, 1.0)
@@ -287,12 +289,17 @@ def adapter_config(mode: str = "frozen_moment", hidden_dim: int = 64, max_correc
 
 
 def build_adapter_from_config(config: dict) -> EventResidualAdapter:
-    return EventResidualAdapter(
+    adapter = EventResidualAdapter(
         input_dim=int(config.get("input_dim", len(FEATURE_NAMES))),
         hidden_dim=int(config.get("hidden_dim", 64)),
         dropout=float(config.get("dropout", 0.05)),
         max_correction=float(config.get("max_correction", 0.10)),
     )
+    transform = config.get("output_transform", "legacy_tanh")
+    if transform not in {"identity", "legacy_tanh"}:
+        raise ValueError("Unknown adapter output transform")
+    adapter.output_transform = transform
+    return adapter
 
 
 def save_adapter(adapter: EventResidualAdapter, output_dir: str | Path, config: dict, manifest: Optional[dict] = None) -> None:

@@ -1,18 +1,5 @@
-from agents.schemas import (
-    PredictionRequest,
-    NumericalPrediction,
-    EventInfo,
-    EventImpact,
-    EventRelevance,
-    FinalPrediction,
-    Skill,
-    SkillType,
-    PipelineContext,
-)
-from agents.numerical_agent import NumericalPredictionAgent
-from agents.event_agent import EventAnalysisAgent
-from agents.event_relevance_agent import EventRelevanceAgent
-from agents.orchestrator import AgentOrchestrator, DynamicOrchestrator
-from agents.skill_library import SkillLibrary
-from agents.skill_extractor import SkillExtractor
-from agents.skill_dispatcher import SkillDispatcher
+"""EAF-MAS components: import explicit modules to keep backends optional.
+
+Formal entry points are in experiments/run_formal_evaluation.py. The former
+skill-driven numerical fusion orchestrator is archived, not an import fallback.
+"""

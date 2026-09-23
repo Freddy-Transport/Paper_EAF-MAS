@@ -53,3 +53,10 @@ classifiers = [
 Homepage = "https://moment-timeseries-foundation-model.github.io/"
 Repository = "https://github.com/moment-timeseries-foundation-model/moment"
 "Bug Tracker" = "https://github.com/moment-timeseries-foundation-model/moment/issues"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["legacy", "private_runs", "outputs", "results", "data", "autotemp"]
+
+[tool.hatch.build]
+exclude = ["legacy/**", "private_runs/**", "outputs/**", "results/**", "data/**", "autotemp/**", "**/knowledge_base*/**"]

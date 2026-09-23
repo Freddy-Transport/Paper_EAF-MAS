@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
+from numbers import Integral, Real
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Sequence, Tuple
 
 
 REQUIRED_AUTOSKILL_SKILL_FIELDS = {
@@ -90,31 +92,27 @@ def _as_float(value: Any, default: float = 0.0) -> float:
 
 def _quality(payload: dict) -> dict:
     q = dict(payload.get("explanation_quality") or {})
-    return {
-        "evidence_coverage": _as_float(q.get("evidence_coverage")),
-        "residual_case_relevance": _as_float(q.get("residual_case_relevance")),
-        "multi_hop_completeness": _as_float(q.get("multi_hop_completeness")),
-        "groundedness": _as_float(q.get("groundedness")),
-        "unsupported_claim_rate": _as_float(q.get("unsupported_claim_rate")),
-        "leakage_free_rate": _as_float(q.get("leakage_free_rate"), 1.0),
-        "decision_consistency": _as_float(
-            q.get("decision_consistency", q.get("calibration_decision_consistent", 1.0)), 1.0
-        ),
-        "skill_guidance_coverage": _as_float(q.get("skill_guidance_coverage")),
-    }
+    q.setdefault("decision_consistency", q.get("calibration_decision_consistent"))
+    measured = {}
+    for key in (
+        "evidence_coverage", "residual_case_relevance", "multi_hop_completeness",
+        "groundedness", "unsupported_claim_rate", "leakage_free_rate",
+        "decision_consistency", "skill_guidance_coverage",
+    ):
+        value = _as_float(q.get(key), float("nan"))
+        measured[key] = value if math.isfinite(value) else None
+    return measured
 
 
-def _quality_score(q: dict) -> float:
-    positive = [
-        q.get("evidence_coverage", 0.0),
-        q.get("residual_case_relevance", 0.0),
-        q.get("multi_hop_completeness", 0.0),
-        q.get("groundedness", 0.0),
-        q.get("leakage_free_rate", 1.0),
-        q.get("decision_consistency", 1.0),
-        1.0 - q.get("unsupported_claim_rate", 0.0),
-    ]
-    return float(sum(_as_float(v) for v in positive) / max(len(positive), 1))
+def _quality_score(q: dict) -> float | None:
+    keys = (
+        "evidence_coverage", "residual_case_relevance", "multi_hop_completeness",
+        "groundedness", "leakage_free_rate", "decision_consistency", "unsupported_claim_rate",
+    )
+    values = [_as_float(q.get(key), float("nan")) for key in keys]
+    if not all(math.isfinite(value) for value in values):
+        return None
+    return float((sum(values[:-1]) + 1.0 - values[-1]) / len(values))
 
 
 def _forecast_array_digest(payload: dict) -> dict:
@@ -208,7 +206,11 @@ def _aggregate_experience_stats(experiences: Sequence[dict]) -> dict:
     decisions = [dict(exp.get("controller_decision") or {}) for exp in experiences]
     historical_counts = [len(exp.get("historical_residual_memory") or []) for exp in experiences]
     qmean = {
-        key: float(sum(_as_float(q.get(key)) for q in qualities) / max(len(qualities), 1))
+        key: (
+            float(sum(float(q[key]) for q in qualities) / len(qualities))
+            if qualities and all(math.isfinite(_as_float(q.get(key), float("nan"))) for q in qualities)
+            else None
+        )
         for key in [
             "evidence_coverage",
             "residual_case_relevance",
@@ -245,6 +247,8 @@ def _aggregate_experience_stats(experiences: Sequence[dict]) -> dict:
 
 
 def _bucket_score(value: float, cuts: tuple[float, float] = (0.50, 0.75)) -> str:
+    if not math.isfinite(value):
+        return "unknown"
     if value < cuts[0]:
         return "low"
     if value < cuts[1]:
@@ -296,9 +300,11 @@ def _cluster_key(exp: dict) -> dict:
     decision = exp.get("controller_decision") or {}
     q = exp.get("explanation_scores") or {}
     has_event = bool(event)
-    source_bucket = _bucket_score(_as_float(audit.get("source_validity_score"), 1.0))
-    residual_bucket = _bucket_score(_as_float(audit.get("residual_support_score"), 0.5))
-    unsupported_bucket = _bucket_score(1.0 - _as_float(q.get("unsupported_claim_rate")), cuts=(0.75, 0.90))
+    source_bucket = _bucket_score(_as_float(audit.get("source_validity_score"), float("nan")))
+    residual_bucket = _bucket_score(_as_float(audit.get("residual_support_score"), float("nan")))
+    unsupported_bucket = _bucket_score(
+        1.0 - _as_float(q.get("unsupported_claim_rate"), float("nan")), cuts=(0.75, 0.90)
+    )
     return {
         "event_type": str(event.get("event_type") or ("no_event" if not has_event else "unknown")),
         "impact_tier": str(event.get("impact_tier") or ("none" if not has_event else "unknown")).upper(),
@@ -360,19 +366,7 @@ def _skill_record(category: str, stats: dict, split: str, mode: str, mutation: d
         "max_cases": int(mutation.get("max_cases", 3)),
         "mutation": mutation,
     }
-    quality = stats.get("quality_mean") or {}
     audit = stats.get("audit_mean") or {}
-    validation_metrics = {
-        "explanation_quality_score": round(_as_float(stats.get("quality_score")), 6),
-        "evidence_coverage": round(_as_float(quality.get("evidence_coverage")), 6),
-        "residual_case_relevance": round(_as_float(quality.get("residual_case_relevance")), 6),
-        "multi_hop_completeness": round(_as_float(quality.get("multi_hop_completeness")), 6),
-        "groundedness": round(_as_float(quality.get("groundedness")), 6),
-        "unsupported_claim_rate": round(_as_float(quality.get("unsupported_claim_rate")), 6),
-        "leakage_free_rate": round(_as_float(quality.get("leakage_free_rate")), 6),
-        "decision_consistency": round(_as_float(quality.get("decision_consistency")), 6),
-        "forecast_array_changed": False,
-    }
     return {
         "skill_id": skill_id,
         "version": int(mutation.get("version", 1)),
@@ -397,7 +391,10 @@ def _skill_record(category: str, stats: dict, split: str, mode: str, mutation: d
             "temporal_min": 0.70,
             "residual_min": 0.50,
         },
-        "validation_metrics": validation_metrics,
+        "validation_metrics": {},
+        "validation_replay": None,
+        "validation_comparison": None,
+        "forecast_arrays_identical": None,
         "promotion_status": {"promoted": False, "reason": "not evaluated"},
         "source_experiences": list(stats.get("source_experiences") or []),
         "created_split": split,
@@ -421,85 +418,219 @@ def _mutate_candidate(skill: dict, index: int, operator: str = "adjust_memory_ca
     mutated["version"] = int(mutated.get("version", 1)) + 1
     mutated["skill_id"] = _stable_id(mutated.get("skill_category"), mutated.get("trigger_condition"), index, operator, prefix="autoskill")
     policy = mutated.setdefault("memory_selection_policy", {})
-    metrics = mutated.setdefault("validation_metrics", {})
     if operator == "tighten_memory_case_budget":
         policy["max_cases"] = 2
-        metrics["residual_case_relevance"] = round(min(1.0, _as_float(metrics.get("residual_case_relevance")) + 0.04), 6)
-        metrics["multi_hop_completeness"] = round(min(1.0, _as_float(metrics.get("multi_hop_completeness")) + 0.02), 6)
     elif operator == "broaden_trigger_for_recall":
         policy["max_cases"] = 5
-        metrics["evidence_coverage"] = round(min(1.0, _as_float(metrics.get("evidence_coverage")) + 0.03), 6)
-        metrics["unsupported_claim_rate"] = round(min(1.0, _as_float(metrics.get("unsupported_claim_rate")) + 0.24), 6)
     elif operator == "strict_abstention_guard":
         policy["max_cases"] = 3
-        metrics["unsupported_claim_rate"] = round(max(0.0, _as_float(metrics.get("unsupported_claim_rate")) - 0.04), 6)
-        evidence = mutated.setdefault("evidence_pattern", {})
-        evidence["source_validity_score"] = round(max(_as_float(evidence.get("source_validity_score")), 0.60), 6)
-        evidence["residual_support_score"] = round(max(_as_float(evidence.get("residual_support_score")), 0.50), 6)
+        guard = mutated.setdefault("abstention_rule", {})
+        guard["source_min"] = max(_as_float(guard.get("source_min")), 0.70)
+        guard["residual_min"] = max(_as_float(guard.get("residual_min")), 0.60)
     else:
         policy["max_cases"] = 2 + index
     policy["mutation"] = {"version": mutated["version"], "operator": operator, "max_cases": policy["max_cases"]}
+    mutated["validation_metrics"] = {}
+    mutated["validation_replay"] = None
+    mutated["validation_comparison"] = None
+    mutated["forecast_arrays_identical"] = None
+    mutated["promotion_status"] = {"promoted": False, "reason": "not evaluated"}
     return mutated
 
 
+ReplayEvaluator = Callable[[dict | None, Sequence[dict]], dict | None]
+
+_COMMON_REPLAY_METRICS = {"leakage_free_rate", "unsupported_claim_rate"}
+_CATEGORY_REPLAY_METRICS = {
+    "routing_skill": set(),
+    "evidence_audit_skill": {
+        "source_validity_score", "geo_consistency_score",
+        "temporal_alignment_score", "semantic_consistency_score",
+    },
+    "residual_memory_skill": {
+        "residual_case_relevance", "multi_hop_completeness", "historical_memory_count",
+    },
+    "abstention_skill": {"decision_consistency"},
+}
+_RATE_METRICS = _COMMON_REPLAY_METRICS.union(
+    *(_CATEGORY_REPLAY_METRICS.values()),
+    {"evidence_coverage", "groundedness", "explanation_quality_score", "skill_guidance_coverage"},
+) - {"historical_memory_count"}
+
+
+def _skill_policy_digest(skill: dict) -> str:
+    policy = {key: skill.get(key) for key in (
+        "skill_id", "version", "skill_category", "trigger_condition", "evidence_pattern",
+        "memory_selection_policy", "reasoning_template", "abstention_rule",
+    )}
+    return hashlib.sha256(json.dumps(policy, sort_keys=True).encode("utf-8")).hexdigest()
+
+
+def _validate_replay_result(result: Any, experience_ids: set[str], skill: dict | None) -> dict:
+    """Validate callback measurements; cached experience scores are never consulted."""
+    if not isinstance(result, dict):
+        raise ValueError("replay_evaluator must return a measurement dict for every skill")
+    replay_ids = result.get("replay_ids")
+    if (
+        not isinstance(replay_ids, list) or not replay_ids
+        or any(not isinstance(item, str) or not item.strip() for item in replay_ids)
+        or len(set(replay_ids)) != len(replay_ids)
+        or not set(replay_ids).issubset(experience_ids)
+    ):
+        raise ValueError("replay_ids must be nonempty, unique input validation experience IDs")
+    count = result.get("valid_sample_count")
+    if isinstance(count, bool) or not isinstance(count, Integral) or count <= 0 or count != len(replay_ids):
+        raise ValueError("valid_sample_count must be positive and equal len(replay_ids)")
+    digests = {}
+    for key in ("numerical_digests_before", "numerical_digests_after"):
+        values = result.get(key)
+        if (
+            not isinstance(values, dict) or set(values) != set(replay_ids)
+            or any(not isinstance(value, str) or not value.strip() for value in values.values())
+        ):
+            raise ValueError(f"{key} must map every replay ID to a nonempty measured digest")
+        digests[key] = dict(values)
+    metrics = result.get("metrics")
+    required = _COMMON_REPLAY_METRICS | _CATEGORY_REPLAY_METRICS.get(
+        skill.get("skill_category") if skill else None, set()
+    )
+    if not isinstance(metrics, dict) or not required.issubset(metrics):
+        raise ValueError(f"replay metrics missing required measurements: {sorted(required)}")
+    measured = {}
+    for key, value in metrics.items():
+        if not isinstance(key, str) or isinstance(value, bool) or not isinstance(value, Real) or not math.isfinite(value):
+            raise ValueError(f"replay metric {key!r} must be a finite measured number, not NA")
+        if key in _RATE_METRICS and not 0.0 <= value <= 1.0:
+            raise ValueError(f"replay metric {key!r} must lie in [0, 1]")
+        if key == "historical_memory_count" and (value < 0 or value != int(value)):
+            raise ValueError("historical_memory_count must be a nonnegative integer")
+        measured[key] = float(value)
+    return {
+        "metrics": measured,
+        "replay_ids": list(replay_ids),
+        "valid_sample_count": int(count),
+        **digests,
+        "forecast_arrays_identical": digests["numerical_digests_before"] == digests["numerical_digests_after"],
+        "policy_digest": _skill_policy_digest(skill) if skill is not None else None,
+    }
+
+
+def _measured_comparison(replay: dict, baseline: dict | None) -> dict | None:
+    if (
+        baseline is None or not baseline["forecast_arrays_identical"]
+        or not replay["forecast_arrays_identical"]
+        or replay["numerical_digests_before"] != baseline["numerical_digests_before"]
+    ):
+        return None
+    return {
+        "baseline": "no_skill",
+        "replay_ids": list(replay["replay_ids"]),
+        "metric_deltas": {
+            key: value - baseline["metrics"][key]
+            for key, value in replay["metrics"].items() if key in baseline["metrics"]
+        },
+    }
+
+
 def _promotion_reason(skill: dict, split: str, mode: str) -> Tuple[bool, str]:
-    if split == "test":
-        return False, "test split is read-only; skill mutation/promotion is disabled."
+    if split != "val":
+        return False, "only validation replay may promote skills."
     if mode not in {"evolving_skill", "residual_rag_evolving_skill"}:
         return False, f"{mode} is not an evolving skill mode."
-    metrics = skill.get("validation_metrics") or {}
-    if metrics.get("forecast_array_changed"):
+    replay = skill.get("validation_replay")
+    if not isinstance(replay, dict) or replay.get("policy_digest") != _skill_policy_digest(skill):
+        return False, "fresh replay measurements for this policy are required."
+    try:
+        measured = _validate_replay_result(replay, set(replay.get("replay_ids") or []), skill)
+    except (ValueError, TypeError):
+        return False, "valid replay measurement provenance is required."
+    metrics = measured["metrics"]
+    if skill.get("validation_metrics") != metrics:
+        return False, "validation metrics do not match measured replay."
+    if not measured["forecast_arrays_identical"]:
         return False, "rejected because skill guidance changed forecast arrays."
-    if _as_float(metrics.get("leakage_free_rate")) < 1.0:
+    if metrics["leakage_free_rate"] < 1.0:
         return False, "rejected because forecast-time explanation may leak post-hoc information."
-    if _as_float(metrics.get("unsupported_claim_rate")) > 0.25:
+    if metrics["unsupported_claim_rate"] > 0.25:
         return False, "rejected because unsupported claim rate is too high."
     category = skill.get("skill_category")
     if category == "routing_skill":
         promoted = bool((skill.get("trigger_condition") or {}).get("has_major_event"))
         return promoted, "promoted for event-triggered retrieval routing." if promoted else "no major event trigger."
     if category == "evidence_audit_skill":
-        evidence = skill.get("evidence_pattern") or {}
         score = (
-            _as_float(evidence.get("source_validity_score"))
-            + _as_float(evidence.get("geo_consistency_score"))
-            + _as_float(evidence.get("temporal_alignment_score"))
-            + _as_float(evidence.get("semantic_consistency_score"))
+            metrics["source_validity_score"]
+            + metrics["geo_consistency_score"]
+            + metrics["temporal_alignment_score"]
+            + metrics["semantic_consistency_score"]
         ) / 4.0
         return score >= 0.60, f"evidence audit mean score={score:.3f}."
     if category == "residual_memory_skill":
         promoted = (
-            _as_float(metrics.get("residual_case_relevance")) >= 0.50
-            and _as_float(metrics.get("multi_hop_completeness")) >= 0.50
-            and int((skill.get("evidence_pattern") or {}).get("historical_memory_count") or 0) > 0
+            metrics["residual_case_relevance"] >= 0.50
+            and metrics["multi_hop_completeness"] >= 0.50
+            and metrics["historical_memory_count"] > 0
         )
         return (
             promoted,
-            "promoted because validation residual memory improves relevance and multi-hop completeness."
+            "promoted because measured validation residual memory meets relevance and multi-hop thresholds."
             if promoted
             else "residual memory relevance or historical case support is insufficient.",
         )
     if category == "abstention_skill":
-        promoted = _as_float(metrics.get("decision_consistency")) >= 1.0
+        promoted = metrics["decision_consistency"] >= 1.0
         return promoted, "promoted for controller-consistent abstention reasoning." if promoted else "decision consistency insufficient."
     return False, "unknown skill category."
 
 
-def evolve_skills(experiences: Sequence[dict], split: str, mode: str = "evolving_skill") -> dict:
-    """Generate, mutate, and promote AutoSkill-style reasoning skills."""
+def evolve_skills(
+    experiences: Sequence[dict], split: str, mode: str = "evolving_skill", *,
+    replay_evaluator: ReplayEvaluator | None = None,
+) -> dict:
+    """Generate policies and independently replay every candidate and mutation.
+
+    ``replay_evaluator(skill, experiences)`` must execute a fresh validation
+    replay, not return cached experience scores. It receives isolated copies of
+    the policy and all input validation experiences. ``skill=None`` requests a
+    no-skill baseline; only that call may return None when unavailable.
+
+    Each result is a dict with ``metrics`` (finite numeric measurements),
+    ``replay_ids`` (unique input experience IDs), ``valid_sample_count`` (positive,
+    equal to their count), and ``numerical_digests_before/after`` (ID-to-digest
+    mappings). Digests must cover the numerical forecast path before and after
+    guidance, including raw forecasts and adjusted forecasts/corrections.
+    Required metrics are declared in _COMMON_REPLAY_METRICS and
+    _CATEGORY_REPLAY_METRICS; missing/NA measurements raise ValueError.
+
+    Threshold eligibility is not evidence of improvement. Comparisons contain
+    measured deltas only when the no-skill baseline covers identical replay IDs
+    and starting numerical digests. Unevaluated invariance is None.
+    """
+    if split != "val":
+        raise ValueError("skill evolution is validation-only; test/train splits are prohibited")
     exp_rows = list(experiences)
+    if not exp_rows or any(not isinstance(exp, dict) or exp.get("split") != "val" for exp in exp_rows):
+        raise ValueError("skill evolution requires nonempty, exclusively val experiences")
+    ids = [exp.get("experience_id") for exp in exp_rows]
+    if any(not isinstance(item, str) or not item.strip() for item in ids) or len(set(ids)) != len(ids):
+        raise ValueError("input validation experiences require unique nonempty experience_id values")
+    if not callable(replay_evaluator):
+        raise ValueError("replay_evaluator callback is required; cached metrics cannot promote skills")
+    experience_ids = set(ids)
+    baseline_result = replay_evaluator(None, deepcopy(exp_rows))
+    baseline = (
+        _validate_replay_result(baseline_result, experience_ids, None)
+        if baseline_result is not None else None
+    )
     clusters = _cluster_experiences(exp_rows)
-    if not clusters:
-        clusters = [({}, exp_rows)]
     candidates: List[dict] = []
     for cluster, rows in clusters:
         stats = _aggregate_experience_stats(rows)
         candidates.extend(
             [_skill_record(category, stats, split, mode, cluster=cluster) for category in DOMAIN_SKILL_CATEGORIES]
         )
-    test_read_only = split == "test"
     mutations: List[dict] = []
-    if not test_read_only and mode in {"evolving_skill", "residual_rag_evolving_skill"}:
+    if mode in {"evolving_skill", "residual_rag_evolving_skill"}:
         operators = ["tighten_memory_case_budget", "broaden_trigger_for_recall", "strict_abstention_guard"]
         mutations = [
             _mutate_candidate(skill, index + 1, operator)
@@ -507,35 +638,28 @@ def evolve_skills(experiences: Sequence[dict], split: str, mode: str = "evolving
             for operator in operators
         ]
 
-    eval_pool = mutations or candidates
+    eval_pool = candidates + mutations
     for skill in eval_pool:
+        result = replay_evaluator(deepcopy(skill), deepcopy(exp_rows))
+        replay = _validate_replay_result(result, experience_ids, skill)
+        skill["validation_metrics"] = dict(replay["metrics"])
+        skill["validation_replay"] = replay
+        skill["forecast_arrays_identical"] = replay["forecast_arrays_identical"]
+        skill["validation_comparison"] = _measured_comparison(replay, baseline)
         promoted, reason = _promotion_reason(skill, split, mode)
         skill["promotion_status"] = {"promoted": bool(promoted), "reason": reason}
-    if mutations:
-        # Keep original candidates visible, but promotion decisions are based on
-        # the best mutation for the same cluster/category. This produces both a
-        # promotion and a rejection trace instead of one all-pass domain skill.
-        mutated_by_key: dict[tuple[str, str], list[dict]] = defaultdict(list)
-        for skill in mutations:
-            cluster_text = json.dumps(skill.get("experience_cluster") or {}, ensure_ascii=False, sort_keys=True)
-            mutated_by_key[(cluster_text, skill["skill_category"])].append(skill)
-        for skill in candidates:
-            cluster_text = json.dumps(skill.get("experience_cluster") or {}, ensure_ascii=False, sort_keys=True)
-            variants = mutated_by_key.get((cluster_text, skill["skill_category"]), [])
-            promoted_variants = [variant for variant in variants if variant.get("promotion_status", {}).get("promoted")]
-            skill["promotion_status"] = (
-                promoted_variants[0]["promotion_status"]
-                if promoted_variants
-                else {"promoted": False, "reason": "all mutations rejected in validation replay."}
-            )
 
     promoted_skills = [skill for skill in eval_pool if skill.get("promotion_status", {}).get("promoted")]
+    invariance = [skill["forecast_arrays_identical"] for skill in eval_pool]
+    if baseline is not None:
+        invariance.append(baseline["forecast_arrays_identical"])
     return {
         "split": split,
         "mode": mode,
-        "experience_count": len(experiences),
-        "test_read_only": bool(test_read_only),
-        "forecast_arrays_identical": True,
+        "experience_count": len(exp_rows),
+        "test_read_only": False,
+        "forecast_arrays_identical": all(invariance) if invariance else None,
+        "no_skill_baseline": baseline,
         "candidate_skills": candidates,
         "mutated_skills": mutations,
         "promoted_skills": promoted_skills,
@@ -607,10 +731,11 @@ def apply_residual_memory_skill(cases: Sequence[dict], skill: dict) -> Tuple[Lis
     baseline_scores = [_case_score(case, trigger) for case in baseline]
     selected_scores = [_case_score(case, trigger) for case in selected]
     metrics = {
-        "baseline_relevance_mean": float(sum(baseline_scores) / max(len(baseline_scores), 1)),
-        "selected_relevance_mean": float(sum(selected_scores) / max(len(selected_scores), 1)),
+        "score_kind": "retrieval_ranking_heuristic_not_independent_quality",
+        "input_order_ranking_score_mean": float(sum(baseline_scores) / len(baseline_scores)) if baseline_scores else None,
+        "selected_ranking_score_mean": float(sum(selected_scores) / len(selected_scores)) if selected_scores else None,
         "selected_count": len(selected),
-        "forecast_array_changed": False,
+        "forecast_array_changed": None,
     }
     return selected, metrics
 

@@ -17,7 +17,7 @@ setup(
     license="MIT",
     url="https://moment-timeseries-foundation-model.github.io/",
     zip_safe=False,
-    packages=find_packages(exclude=["data", "tutorials"]),
+    packages=find_packages(exclude=["data", "tutorials", "legacy", "legacy.*", "private_runs", "private_runs.*", "outputs", "results"]),
     install_requires=required,
     long_description=long_description,
     long_description_content_type='text/markdown'

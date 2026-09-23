@@ -112,9 +112,8 @@ VENUE_STATION_MAP_PATH = os.path.join(DATA_DIR, "venue_station_map.json")
 # 事件分级与 enrichment（P0+）
 EVENT_TIER_ENABLED = True
 
-# ---- Event-aware post-training 推理模式 ----
-# numerical_only | event_adapter_frozen_moment | event_adapter_peft_moment | legacy_fusion
-PREDICTION_MODE = os.environ.get("PREDICTION_MODE", "legacy_fusion")
+# Formal evaluation uses explicit manifests and cell-level calibration.
+PREDICTION_MODE = os.environ.get("PREDICTION_MODE", "eafmas_formal")
 EVENT_ADAPTER_PATH = os.path.join(
     PROJECT_ROOT, "experiments", "outputs", "event_adapter", "frozen_moment"
 )
